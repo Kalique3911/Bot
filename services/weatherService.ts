@@ -1,39 +1,73 @@
 import puppeteer from "puppeteer"
-
-const getCoordinates = async (city: string) => {
-    let response = await fetch(`https://nominatim.openstreetmap.org/search?q=${city}&format=json&limit=1&countrycodes=ru`)
-    let json = await response.json()
-    return { lat: json[0].lat, lon: json[0].lon }
-}
+import { getCoordinates } from "./locationService"
 
 export const getWeather = async (city: string, units: string, geolocation: { lat: string; lon: string } | null) => {
     let browser = await puppeteer.launch({
         headless: true,
     })
     let page = await browser.newPage()
-    let { lat, lon } = geolocation ? geolocation : await getCoordinates(city)
+    let res = geolocation ? geolocation : await getCoordinates(city)
+    let lat, lon
+    if (res) {
+        lat = res.lat
+        lon = res.lon
+    } else {
+        return null
+    }
 
     await page.goto(`https://yandex.ru/pogoda?lat=${lat}&lon=${lon}`)
 
-    await page.waitForSelector(".temp__value, .link__condition, .title ")
+    await page.waitForSelector(".temp__value, .link__condition, .title, .wind-speed, .term.term_orient_v.fact__humidity, .term.term_orient_v.fact__pressure ")
     let tempElement = await page.$(".temp__value")
     let condElement = await page.$(".link__condition")
     let locElement = await page.$(".title")
+    let windElement = await page.$(".wind-speed")
+    let humidElement = await page.$(".term.term_orient_v.fact__humidity")
+    let pressElement = await page.$(".term.term_orient_v.fact__pressure")
 
     let temperature = await page.evaluate((tempElement) => tempElement?.textContent, tempElement)
-    temperature = units === "F" ? Math.round(((Number(temperature) - 32) * 5) / 9).toString() : temperature
-
+    temperature = units === "F" ? Math.round((Number(temperature) * 9) / 5 + 32).toString() : temperature
     let condition = await page.evaluate((condElement) => condElement?.textContent, condElement)
     let location = await page.evaluate((locElement) => locElement?.textContent, locElement)
+    let wind = await page.evaluate((windElement) => windElement?.textContent, windElement)
 
-    return `${location}: ${temperature}°${units}, ${condition}`
+    wind =
+        units === "F"
+            ? Math.round(
+                  Number(
+                      wind
+                          ?.split("")
+                          .map((el) => {
+                              if (el === ",") {
+                                  return "."
+                              } else {
+                                  return el
+                              }
+                          })
+                          .join("")
+                  ) * 1.94
+              ).toString() + " узлов"
+            : wind + " м/c"
+    let humidity = await page.evaluate((humidElement) => humidElement?.textContent, humidElement)
+    let pressure = await page.evaluate((pressElement) => pressElement?.textContent, pressElement)
+    pressure = units === "F" ? (Math.round((Number(pressure?.slice(0, 3)) / 25.4) * 100) / 100).toString() + " дюймов рт. ст." : pressure?.slice(0, 3) + " мм рт. ст."
+
+    return `${location}: ${temperature}°${units}, ${condition}
+ветер: ${wind}, влажность: ${humidity?.slice(humidity.length - 5, humidity.length - 2)}%, давление: ${pressure}`
 }
 
 export const getForecast = async (city: string, units: string, geolocation: { lat: string; lon: string } | null) => {
     let browser = await puppeteer.launch()
     let page = await browser.newPage()
 
-    let { lat, lon } = geolocation ? geolocation : await getCoordinates(city)
+    let res = geolocation ? geolocation : await getCoordinates(city)
+    let lat, lon
+    if (res) {
+        lat = res.lat
+        lon = res.lon
+    } else {
+        return null
+    }
 
     await page.goto(`https://yandex.ru/pogoda?lat=${lat}&lon=${lon}`)
 
@@ -82,16 +116,21 @@ export const getForecast = async (city: string, units: string, geolocation: { la
                     }
                 }
             }
-            let diff = Math.round(((Number(firstTemp) - 32) * 5) / 9).toString().length + firstTempInd.start - firstTempInd.end - 1
+
             if (ind === 4) console.log(firstTemp)
             if (ind === 4) console.log(firstTempInd.end.toString() + " " + firstTempInd.start.toString())
             if (ind === 4) console.log(secondTemp)
             if (ind === 4) console.log(secondTempInd.end.toString() + " " + secondTempInd.start.toString())
-            arr?.splice(firstTempInd.start, firstTempInd.end - firstTempInd.start + 1, Math.round(((Number(firstTemp) - 32) * 5) / 9).toString())
+            let firstExp = Math.round((Number(firstTemp) * 9) / 5 + 32)
+            if (ind === 4) console.log(firstExp)
+            let secondExp = Math.round((Number(secondTemp) * 9) / 5 + 32)
+            let diff = (firstExp > 0 ? firstExp.toString().length + 1 : firstExp.toString().length) + firstTempInd.start - firstTempInd.end - 1
+            console.log(diff)
+            arr?.splice(firstTempInd.start, firstTempInd.end - firstTempInd.start + 1, firstExp > 0 ? "+" + firstExp.toString() : firstExp.toString())
             if (ind === 4) console.log(arr)
             arr = arr?.join("").split("")
             if (ind === 4) console.log(arr)
-            arr?.splice(secondTempInd.start + diff, secondTempInd.end - secondTempInd.start + 1, Math.round(((Number(secondTemp) - 32) * 5) / 9).toString())
+            arr?.splice(secondTempInd.start + diff, secondTempInd.end - secondTempInd.start + 1, secondExp > 0 ? "+" + secondExp.toString() : secondExp.toString())
             arr = arr?.join("").split("")
             if (ind === 4) console.log(arr)
         }

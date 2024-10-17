@@ -1,8 +1,8 @@
 require("dotenv").config()
 import { Markup, Telegraf } from "telegraf"
-import { getWeather, getForecast } from "./services/weatherService"
-import { get, set } from "./services/cacheService"
-import { handleError } from "./utils/errorHandling"
+import { getWeather, getForecast } from "./src/services/weatherService"
+import { get, set } from "./src/services/cacheService"
+import { handleError } from "./src/utils/errorHandling"
 
 let bot = new Telegraf(process.env.token!)
 

@@ -1,4 +1,4 @@
-import { logger } from "../logger/logger"
+import { logger } from "../../logger"
 
 export const handleError = (err: Error) => {
     console.log(err?.message)
